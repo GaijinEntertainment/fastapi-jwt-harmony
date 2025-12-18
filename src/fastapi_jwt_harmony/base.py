@@ -170,6 +170,33 @@ class JWTHarmonyBase(Generic[UserModelT]):
         if denylist_callback:
             cls._token_in_denylist_callback = denylist_callback
 
+    def get_unverified_jwt(self, encoded_token: Optional[str] = None) -> Optional[dict[str, Union[str, int, bool]]]:
+        """
+        Decode a JWT token without signature or expiration verification.
+
+        This method decodes a JWT token to extract its claims without validating
+        the signature or checking if it has expired. Useful for extracting information
+        from tokens that may be expired or when signature verification is not needed.
+
+        Args:
+            encoded_token: Encoded JWT as a string. If not provided, uses internal token.
+
+        Returns:
+            Decoded token payload if successful, None if no token is available.
+
+        Raises:
+            JWTDecodeError: If the token structure is invalid and cannot be decoded.
+        """
+        token = encoded_token or self._token
+        if not token:
+            return None
+
+        try:
+            decoded: dict[str, Union[str, int, bool]] = jwt.decode(token, options={'verify_signature': False, 'verify_exp': False})
+            return decoded
+        except jwt.DecodeError as e:
+            raise JWTDecodeError(str(e)) from e
+
     def get_raw_jwt(self, encoded_token: Optional[str] = None) -> Optional[dict[str, Union[str, int, bool]]]:
         """
         Decodes and verifies a JSON Web Token (JWT).
@@ -185,10 +212,9 @@ class JWTHarmonyBase(Generic[UserModelT]):
             return None
 
         # Decode token without verification first to check if it's in denylist
-        try:
-            unverified_token = jwt.decode(token, options={'verify_signature': False, 'verify_exp': False})
-        except jwt.DecodeError as e:
-            raise JWTDecodeError(str(e)) from e
+        unverified_token = self.get_unverified_jwt(token)
+        if not unverified_token:
+            return None
 
         # Check if denylist is enabled
         if self.config.denylist_enabled:
@@ -494,7 +520,8 @@ class JWTHarmonyBase(Generic[UserModelT]):
             )
             return decoded
         except jwt.ExpiredSignatureError as exc:
-            raise TokenExpired('Token expired') from exc
+            jti_value = (self.get_unverified_jwt(encoded_token) or {}).get('jti')
+            raise TokenExpired('Token expired', jti=str(jti_value) if jti_value else None) from exc
         except jwt.InvalidTokenError as e:
             raise JWTDecodeError(str(e)) from e
 

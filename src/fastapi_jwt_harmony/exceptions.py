@@ -231,12 +231,15 @@ class TokenExpired(JWTHarmonyException):
         status_code (int): HTTP status code corresponding to the exception (401).
         message (str): Description or message explaining the reason for the
             exception.
+        jti (str | None): The JWT ID (jti claim) of the expired token, if available.
     """
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, jti: str | None = None) -> None:
         """Initializes a token expired error with a message.
 
         Args:
             message (str): The message explaining that the token has expired.
+            jti (str | None): The JWT ID (jti claim) of the expired token, if available.
         """
         super().__init__(401, message)
+        self.jti = jti

@@ -10,7 +10,7 @@ from jwt.algorithms import has_crypto
 
 from fastapi_jwt_harmony import JWTHarmony, JWTHarmonyDep, JWTHarmonyRefresh
 from fastapi_jwt_harmony.config import JWTHarmonyConfig
-from fastapi_jwt_harmony.exceptions import JWTHarmonyException
+from fastapi_jwt_harmony.exceptions import JWTDecodeError, JWTHarmonyException, TokenExpired
 from tests.user_models import SimpleUser
 
 
@@ -145,6 +145,39 @@ def test_get_raw_jwt(default_access_token, encoded_token):
 
     auth = JWTHarmony()
     assert auth.get_raw_jwt(encoded_token) == default_access_token
+
+
+def test_get_unverified_jwt(default_access_token):
+    """Test that get_unverified_jwt decodes tokens without verification."""
+    # Reset configuration
+    JWTHarmony._config = None
+
+    JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(secret_key='secret-key'))
+
+    auth = JWTHarmony()
+
+    # Test with valid token
+    token = jwt.encode(default_access_token, 'secret-key', algorithm='HS256')
+    result = auth.get_unverified_jwt(token)
+    assert result == default_access_token
+
+    # Test with expired token (should still decode)
+    expired_payload = {**default_access_token, 'exp': 0}
+    expired_token = jwt.encode(expired_payload, 'secret-key', algorithm='HS256')
+    result = auth.get_unverified_jwt(expired_token)
+    assert result == expired_payload
+
+    # Test with invalid signature (should still decode)
+    token_wrong_sig = jwt.encode(default_access_token, 'wrong-key', algorithm='HS256')
+    result = auth.get_unverified_jwt(token_wrong_sig)
+    assert result == default_access_token
+
+    # Test with completely malformed token (should raise JWTDecodeError)
+    with pytest.raises(JWTDecodeError):
+        auth.get_unverified_jwt('invalid.token')
+
+    # Test with no token provided
+    assert auth.get_unverified_jwt() is None
 
 
 def test_get_jwt_jti(client, default_access_token, encoded_token):
@@ -339,3 +372,24 @@ def test_invalid_asymmetric_algorithms(client):
     token = auth2.create_access_token(user_claims=user)
     with pytest.raises(RuntimeError, match=r'public_key'):
         client.get('/protected', headers={'Authorization': f'Bearer {token}'})
+
+
+def test_expired_token_includes_jti(default_access_token):
+    """Test that TokenExpired exception includes the jti from expired tokens."""
+    # Reset configuration
+    JWTHarmony._config = None
+
+    JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(secret_key='secret-key'))
+
+    auth = JWTHarmony()
+
+    # Create an expired token using the fixture
+    expired_payload = {**default_access_token, 'exp': 0}  # Expired in 1970
+    expired_token = jwt.encode(expired_payload, 'secret-key', algorithm='HS256')
+
+    # Try to verify the expired token
+    with pytest.raises(TokenExpired, match='Token expired') as exc_info:
+        auth.get_raw_jwt(expired_token)
+
+    # Verify the exception contains the jti
+    assert exc_info.value.jti == default_access_token['jti']
