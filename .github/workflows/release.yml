@@ -108,20 +108,6 @@ jobs:
           exit 1
         fi
 
-  create-tag:
-    runs-on: ubuntu-latest
-    needs: validate-version
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_tag == 'true'
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Create and push tag
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git tag ${{ needs.validate-version.outputs.tag_name }}
-        git push origin ${{ needs.validate-version.outputs.tag_name }}
-
   build:
     runs-on: ubuntu-latest
     needs: validate-version
