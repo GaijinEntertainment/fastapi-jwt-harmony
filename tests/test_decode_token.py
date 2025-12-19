@@ -1,11 +1,11 @@
 import os
-import time
 
 import jwt
 import pytest
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from freezegun import freeze_time
 from jwt.algorithms import has_crypto
 
 from fastapi_jwt_harmony import JWTHarmony, JWTHarmonyDep, JWTHarmonyRefresh
@@ -80,13 +80,15 @@ def test_verified_token(client, encoded_token, authorize_fixture):
     response = client.get('/protected', headers={'Authorization': f'Bearer {token}'})
     assert response.status_code == 422
     assert response.json() == {'detail': 'Signature verification failed'}
-    # ExpiredSignatureError
+    # ExpiredSignatureError - test token expiration
     user = SimpleUser(id='test')
-    token = auth.create_access_token(user_claims=user)
-    time.sleep(3)
-    response = client.get('/protected', headers={'Authorization': f'Bearer {token}'})
-    assert response.status_code == 401
-    assert response.json() == {'detail': 'Token expired'}
+    with freeze_time('2025-01-01 12:00:00') as frozen_time:
+        token = auth.create_access_token(user_claims=user)
+        # Fast-forward 3 seconds (beyond 2-second expiry)
+        frozen_time.move_to('2025-01-01 12:00:03')
+        response = client.get('/protected', headers={'Authorization': f'Bearer {token}'})
+        assert response.status_code == 401
+        assert response.json() == {'detail': 'Token expired'}
     # InvalidAlgorithmError
     token = jwt.encode({'some': 'payload'}, 'secret', algorithm='HS384')
     response = client.get('/protected', headers={'Authorization': f'Bearer {token}'})
@@ -99,26 +101,28 @@ def test_verified_token(client, encoded_token, authorize_fixture):
             secret_key='secret-key',
             access_token_expires=1,
             refresh_token_expires=1,
-            decode_leeway=2,
+            decode_leeway=10,
             token_location='headers',
         ),
     )
 
-    # Create new auth instance with updated config
+    # Test decode_leeway - tokens expired but valid within leeway window
     auth2 = JWTHarmony()
     user = SimpleUser(id='test')
-    access_token = auth2.create_access_token(user_claims=user)
-    refresh_token = auth2.create_refresh_token(user_claims=user)
-    time.sleep(2)
-    # JWT payload is now expired
-    # But with some leeway, it will still validate
-    response = client.get('/protected', headers={'Authorization': f'Bearer {access_token}'})
-    assert response.status_code == 200
-    assert response.json() == {'hello': 'world'}
+    with freeze_time('2025-01-01 12:00:00') as frozen_time:
+        access_token = auth2.create_access_token(user_claims=user)
+        refresh_token = auth2.create_refresh_token(user_claims=user)
+        # Fast-forward 2 seconds (beyond 1-second expiry, within 10-second leeway)
+        frozen_time.move_to('2025-01-01 12:00:02')
 
-    response = client.get('/refresh_token', headers={'Authorization': f'Bearer {refresh_token}'})
-    assert response.status_code == 200
-    assert response.json() == 'test'
+        # JWT payload is now expired but leeway makes it still valid
+        response = client.get('/protected', headers={'Authorization': f'Bearer {access_token}'})
+        assert response.status_code == 200
+        assert response.json() == {'hello': 'world'}
+
+        response = client.get('/refresh_token', headers={'Authorization': f'Bearer {refresh_token}'})
+        assert response.status_code == 200
+        assert response.json() == 'test'
 
     # Valid Token
     response = client.get('/protected', headers={'Authorization': f'Bearer {encoded_token}'})

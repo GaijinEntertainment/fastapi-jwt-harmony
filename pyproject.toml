@@ -142,6 +142,7 @@ test = [
     "pytest-cov>=6.0.0",
     "pytest-asyncio>=0.25.0",
     "httpx>=0.28.1",
+    "freezegun>=1.5.0",
 ]
 dev = [
     "cryptography>=45.0.2",
