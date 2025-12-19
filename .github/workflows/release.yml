@@ -10,11 +10,6 @@ on:
         description: 'Version to release (e.g., 1.0.0)'
         required: true
         type: string
-      create_tag:
-        description: 'Create tag for this version'
-        required: true
-        type: boolean
-        default: true
 
 env:
   PYTHON_VERSION: "3.11"
