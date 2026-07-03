@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-03
+
+### Security
+- Reject a token whose header `alg` is not in the configured allow-list before
+  selecting a decode key, so a crafted `alg` header can no longer trigger an
+  unhandled `RuntimeError` (HTTP 500). An accepted-but-unprovisioned algorithm
+  (e.g. a legacy symmetric alg listed in `decode_algorithms` with no
+  `secret_key`) now also rejects cleanly with `422` instead of `500`.
+- Run the denylist callback against the *verified* token payload instead of the
+  unverified one, so attacker-controlled claims can no longer drive denylist
+  lookups before signature verification.
+
+### Fixed
+- `user_claims` no longer returns `None` when `audience`/`issuer` are configured:
+  `aud`/`iss` are now treated as reserved claims consistently on both the encode
+  and decode sides.
+- Accept a falsy-but-present `subject` (e.g. `0` or `""`) when creating a token
+  instead of rejecting it as missing.
+- In headers+cookies mode, an invalid or malformed header token now falls back to
+  cookie authentication instead of failing the request outright; the specific
+  header error (e.g. `TokenExpired` with its `jti`) is still surfaced when no
+  cookie is available to try.
+- `unset_access_cookies`/`unset_refresh_cookies` now emit the `secure` and
+  `samesite` attributes so browsers reliably clear the cookies.
+
+### Changed
+- The verified token payload is cached per request, so a token is verified and
+  denylist-checked at most once per request.
+- `JWTHarmonyConfig` now rejects `cookie_samesite='none'` unless `cookie_secure`
+  is `True`, matching the browser requirement for `SameSite=None` cookies.
+
 ### Added
 - Initial release of FastAPI JWT Harmony
 - Type-safe JWT authentication with Pydantic integration
