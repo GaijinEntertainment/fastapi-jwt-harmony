@@ -7,7 +7,7 @@ from typing import Optional, Union
 from fastapi import Request, Response
 
 from .base import JWTHarmonyBase, UserModelT
-from .exceptions import AccessTokenRequired, CSRFError, JWTDecodeError, JWTHarmonyException, MissingTokenError, RevokedTokenError
+from .exceptions import AccessTokenRequired, CSRFError, InvalidHeaderError, JWTDecodeError, JWTHarmonyException, MissingTokenError, RevokedTokenError
 
 
 class JWTHarmony(JWTHarmonyBase[UserModelT]):
@@ -33,7 +33,49 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
         # Extract token from headers if present
         if req and self.jwt_in_headers:
             if auth := req.headers.get(self.config.header_name):
-                self._get_jwt_from_headers(auth)
+                try:
+                    self._get_jwt_from_headers(auth)
+                except InvalidHeaderError:
+                    # When cookies are also enabled, a malformed Authorization
+                    # header must not block cookie authentication; defer to it.
+                    if not self.jwt_in_cookies:
+                        raise
+
+    def _authenticate(self, type_token: str, cookie_key: str, csrf_header_name: str, fresh: bool = False) -> None:
+        """
+        Verify a token from the configured locations, trying headers then cookies.
+
+        A header token that fails verification falls back to cookies when cookies
+        are enabled, but its specific error (e.g. TokenExpired with its jti) is
+        surfaced if the cookie location has no token to try. Revoked tokens are a
+        definitive rejection and never fall back.
+        """
+        header_error: Optional[JWTHarmonyException] = None
+
+        if self.jwt_in_headers:
+            if self.token:
+                try:
+                    self._verify_jwt_in_request(self.token, type_token, 'headers', fresh)
+                    return  # Success
+                except RevokedTokenError:
+                    raise
+                except JWTHarmonyException as exc:
+                    if not self.jwt_in_cookies:
+                        raise  # No other location to try
+                    header_error = exc
+            elif not self.jwt_in_cookies:
+                raise MissingTokenError(f'Missing {self.config.header_name} Header')
+
+        if self.jwt_in_cookies:
+            if self._request is None:
+                raise RuntimeError('Request object is required for cookie authentication')
+            try:
+                self._verify_and_get_jwt_in_cookies(self._request, cookie_key, csrf_header_name, type_token, fresh)
+            except MissingTokenError:
+                # Nothing usable in cookies either; prefer the header's specific error.
+                if header_error is not None:
+                    raise header_error from None
+                raise
 
     def jwt_required(self) -> None:
         """
@@ -45,27 +87,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             MissingTokenError: If no token is found
             Various JWT exceptions on validation failure
         """
-        # Try headers first if enabled
-        if self.jwt_in_headers:
-            if self.token:
-                try:
-                    self._verify_jwt_in_request(self.token, 'access', 'headers')
-                    return  # Success
-                except MissingTokenError:
-                    if not self.jwt_in_cookies:
-                        raise  # Re-raise if cookies are not enabled
-                    # Continue to check cookies
-            else:
-                # No token in headers
-                if not self.jwt_in_cookies:
-                    raise MissingTokenError(f'Missing {self.config.header_name} Header')
-                # Continue to check cookies
-
-        # Try cookies if enabled
-        if self.jwt_in_cookies:
-            if self._request is None:
-                raise RuntimeError('Request object is required for cookie authentication')
-            self._verify_and_get_jwt_in_cookies(self._request, self.config.access_cookie_key, self.config.access_csrf_header_name, 'access')
+        self._authenticate('access', self.config.access_cookie_key, self.config.access_csrf_header_name)
 
     def jwt_optional(self) -> None:
         """
@@ -100,27 +122,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             RefreshTokenRequired: If token is not a refresh token
             Various JWT exceptions on validation failure
         """
-        # Try headers first if enabled
-        if self.jwt_in_headers:
-            if self.token:
-                try:
-                    self._verify_jwt_in_request(self.token, 'refresh', 'headers')
-                    return  # Success
-                except MissingTokenError:
-                    if not self.jwt_in_cookies:
-                        raise  # Re-raise if cookies are not enabled
-                    # Continue to check cookies
-            else:
-                # No token in headers
-                if not self.jwt_in_cookies:
-                    raise MissingTokenError(f'Missing {self.config.header_name} Header')
-                # Continue to check cookies
-
-        # Try cookies if enabled
-        if self.jwt_in_cookies:
-            if self._request is None:
-                raise RuntimeError('Request object is required for cookie authentication')
-            self._verify_and_get_jwt_in_cookies(self._request, self.config.refresh_cookie_key, self.config.refresh_csrf_header_name, 'refresh')
+        self._authenticate('refresh', self.config.refresh_cookie_key, self.config.refresh_csrf_header_name)
 
     def fresh_jwt_required(self) -> None:
         """
@@ -133,27 +135,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             FreshTokenRequired: If token is not fresh
             Various JWT exceptions on validation failure
         """
-        # Try headers first if enabled
-        if self.jwt_in_headers:
-            if self.token:
-                try:
-                    self._verify_jwt_in_request(self.token, 'access', 'headers', fresh=True)
-                    return  # Success
-                except MissingTokenError:
-                    if not self.jwt_in_cookies:
-                        raise  # Re-raise if cookies are not enabled
-                    # Continue to check cookies
-            else:
-                # No token in headers
-                if not self.jwt_in_cookies:
-                    raise MissingTokenError(f'Missing {self.config.header_name} Header')
-                # Continue to check cookies
-
-        # Try cookies if enabled
-        if self.jwt_in_cookies:
-            if self._request is None:
-                raise RuntimeError('Request object is required for cookie authentication')
-            self._verify_and_get_jwt_in_cookies(self._request, self.config.access_cookie_key, self.config.access_csrf_header_name, 'access', fresh=True)
+        self._authenticate('access', self.config.access_cookie_key, self.config.access_csrf_header_name, fresh=True)
 
     def set_access_cookies(self, encoded_access_token: str, response: Optional[Response] = None, max_age: Optional[int] = None) -> None:
         """
@@ -246,11 +228,23 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
 
         # Unset main access token cookie
         cookie_key = self.config.access_cookie_key
-        response.delete_cookie(key=cookie_key, path=self.config.access_cookie_path, domain=self.config.cookie_domain)
+        response.delete_cookie(
+            key=cookie_key,
+            path=self.config.access_cookie_path,
+            domain=self.config.cookie_domain,
+            secure=self.config.cookie_secure,
+            samesite=self.config.cookie_samesite,
+        )
 
         # Unset CSRF cookie
         csrf_key = self.config.access_csrf_cookie_key
-        response.delete_cookie(key=csrf_key, path=self.config.access_cookie_path, domain=self.config.cookie_domain)
+        response.delete_cookie(
+            key=csrf_key,
+            path=self.config.access_cookie_path,
+            domain=self.config.cookie_domain,
+            secure=self.config.cookie_secure,
+            samesite=self.config.cookie_samesite,
+        )
 
     def unset_refresh_cookies(self, response: Optional[Response] = None) -> None:
         """
@@ -265,11 +259,23 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
 
         # Unset main refresh token cookie
         cookie_key = self.config.refresh_cookie_key
-        response.delete_cookie(key=cookie_key, path=self.config.refresh_cookie_path, domain=self.config.cookie_domain)
+        response.delete_cookie(
+            key=cookie_key,
+            path=self.config.refresh_cookie_path,
+            domain=self.config.cookie_domain,
+            secure=self.config.cookie_secure,
+            samesite=self.config.cookie_samesite,
+        )
 
         # Unset CSRF cookie
         csrf_key = self.config.refresh_csrf_cookie_key
-        response.delete_cookie(key=csrf_key, path=self.config.refresh_cookie_path, domain=self.config.cookie_domain)
+        response.delete_cookie(
+            key=csrf_key,
+            path=self.config.refresh_cookie_path,
+            domain=self.config.cookie_domain,
+            secure=self.config.cookie_secure,
+            samesite=self.config.cookie_samesite,
+        )
 
     def _set_csrf_cookie(self, encoded_token: str, response: Response, cookie_key: str, cookie_path: str, max_age: Optional[int]) -> None:
         """
@@ -427,6 +433,3 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
 
         # It's already an int (seconds)
         return expires
-
-
-# Import required types

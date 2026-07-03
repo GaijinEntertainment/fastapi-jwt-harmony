@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 
@@ -219,3 +220,10 @@ class JWTHarmonyConfig(BaseModel):
                 raise ValueError("The 'csrf_methods' must be between http request methods")
             response.add(i.upper())
         return response
+
+    @model_validator(mode='after')
+    def validate_samesite_secure(self) -> 'JWTHarmonyConfig':
+        """Enforce the browser rule that SameSite=None cookies must also be Secure."""
+        if self.cookie_samesite == 'none' and not self.cookie_secure:
+            raise ValueError("cookie_secure must be True when cookie_samesite is 'none'")
+        return self

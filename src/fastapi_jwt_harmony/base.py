@@ -22,6 +22,10 @@ from .utils import get_jwt_identifier
 
 UserModelT = TypeVar('UserModelT', bound=BaseModel)
 
+# Claims that the library manages itself and must never be treated as user claims,
+# both when encoding a token and when reconstructing the user model from one.
+RESERVED_CLAIMS = frozenset({'sub', 'iat', 'nbf', 'jti', 'exp', 'type', 'fresh', 'csrf', 'aud', 'iss'})
+
 
 def _process_user_claims(user_claims: Optional[Union[dict[str, Any], BaseModel]]) -> dict[str, Any]:
     """Process user claims and extract subject if needed."""
@@ -47,7 +51,7 @@ def _validate_and_process_token_params(
 
     # Handle user claims
     claims_dict = _process_user_claims(user_claims)
-    final_subject = subject or claims_dict.get('id')
+    final_subject = subject if subject is not None else claims_dict.get('id')
 
     if final_subject is None:
         raise TypeError('missing 1 required positional argument: subject or user_claims with id field')
@@ -61,6 +65,12 @@ class JWTHarmonyBase(Generic[UserModelT]):
 
     This abstract base class provides core JWT functionality that is shared
     between HTTP (FastAPI) and WebSocket implementations.
+
+    Instances are request-scoped: the provided FastAPI dependencies create a
+    fresh instance per request. An instance caches the verified payload of its
+    current token, so it must not be reused across requests — doing so would
+    also reuse that cached result and skip the denylist check on a token that
+    may have been revoked in the meantime.
     """
 
     _config: Optional[JWTHarmonyConfig] = None
@@ -71,6 +81,10 @@ class JWTHarmonyBase(Generic[UserModelT]):
         """Initialize base JWT handler."""
         # Initialize instance variables
         self._token: Optional[str] = None
+        # Single-slot cache of the last successfully verified token, keyed by the
+        # raw token string, so a token is verified (and denylist-checked) at most
+        # once per request.
+        self._verified_cache: Optional[tuple[str, dict[str, Any]]] = None
 
         # Ensure the class is configured
         if self._config is None:
@@ -139,7 +153,7 @@ class JWTHarmonyBase(Generic[UserModelT]):
                 return None
 
             # Extract user claims (excluding JWT reserved claims)
-            user_data = {k: v for k, v in decoded_token.items() if k not in {'sub', 'iat', 'nbf', 'jti', 'exp', 'fresh', 'type', 'csrf'}}
+            user_data = {k: v for k, v in decoded_token.items() if k not in RESERVED_CLAIMS}
 
             # Create and return user model instance
             return cast(UserModelT, self._user_model_class(**user_data))  # pylint: disable=not-callable
@@ -201,40 +215,44 @@ class JWTHarmonyBase(Generic[UserModelT]):
         """
         Decodes and verifies a JSON Web Token (JWT).
 
+        The result is cached per token string, so repeated calls within a request
+        verify (and run the denylist check) only once.
+
         Args:
             encoded_token: Encoded JWT as a string. If not provided, uses internal token.
 
         Returns:
-            The verified token if verification succeeds; otherwise, None.
+            The verified token payload, or None if no token is available.
+
+        Raises:
+            TokenExpired: If the token has expired.
+            JWTDecodeError: If the token is malformed or its signature is invalid.
+            RevokedTokenError: If the token is present in the denylist.
         """
         token = encoded_token or self._token
         if not token:
             return None
 
-        # Decode token without verification first to check if it's in denylist
-        unverified_token = self.get_unverified_jwt(token)
-        if not unverified_token:
-            return None
+        if self._verified_cache is not None and self._verified_cache[0] == token:
+            return self._verified_cache[1]
 
-        # Check if denylist is enabled
+        # Verify the signature and expiration before trusting any claim.
+        verified_token = self._verified_token(token)
+
+        # Check the denylist against the verified payload, not attacker-controlled data.
         if self.config.denylist_enabled:
             denylist_callback = self.__class__._token_in_denylist_callback  # pylint: disable=protected-access
             if not denylist_callback:
                 raise RuntimeError('token_in_denylist_callback must be provided when denylist is enabled')
 
-            # Check if we should check this token type
-            token_type = unverified_token.get('type')
-            if self.config.denylist_token_checks:
-                # Only check if token type is in the check list
-                if token_type in self.config.denylist_token_checks:
-                    if denylist_callback(unverified_token):  # pylint: disable=not-callable
-                        raise RevokedTokenError('Token has been revoked')
-            elif denylist_callback(unverified_token):  # pylint: disable=not-callable
-                # Check all token types if no specific types configured
-                raise RevokedTokenError('Token has been revoked')
+            token_type = verified_token.get('type')
+            checks = self.config.denylist_token_checks
+            if not checks or token_type in checks:
+                if denylist_callback(verified_token):  # pylint: disable=not-callable
+                    raise RevokedTokenError('Token has been revoked')
 
-        # Now verify the token properly
-        return self._verified_token(token)
+        self._verified_cache = (token, verified_token)
+        return verified_token
 
     def get_jwt_subject(self) -> Optional[str]:
         """
@@ -437,8 +455,7 @@ class JWTHarmonyBase(Generic[UserModelT]):
             payload['iss'] = self.config.encode_issuer
 
         # Merge user claims (excluding reserved claims)
-        reserved_claims = {'sub', 'iat', 'nbf', 'jti', 'exp', 'type', 'fresh', 'csrf', 'aud', 'iss'}
-        payload.update({k: v for k, v in claims_dict.items() if k not in reserved_claims})
+        payload.update({k: v for k, v in claims_dict.items() if k not in RESERVED_CLAIMS})
 
         return payload
 
@@ -505,7 +522,22 @@ class JWTHarmonyBase(Generic[UserModelT]):
             unverified_headers = jwt.get_unverified_header(encoded_token)
             algorithm_from_header = unverified_headers.get('alg')
             final_algorithm = algorithm_from_header or self.config.algorithm
-            secret = self._get_decode_key(final_algorithm)
+            # Reject an algorithm the config does not allow before selecting a key,
+            # so a crafted `alg` header cannot force key selection for a different
+            # algorithm family (which would otherwise raise an unhandled error).
+            if final_algorithm not in algorithms:
+                raise JWTDecodeError('The specified alg value is not allowed')
+            try:
+                secret = self._get_decode_key(final_algorithm)
+            except RuntimeError:
+                # An accepted but non-primary algorithm whose key was never
+                # provisioned is effectively unusable: reject the (attacker-chosen)
+                # token instead of surfacing a server error. A missing key for the
+                # primary configured algorithm is a genuine misconfiguration and
+                # still raises.
+                if final_algorithm == self.config.algorithm:
+                    raise
+                raise JWTDecodeError('The specified alg value is not allowed') from None
 
             # Decode with all validations
             leeway = self.config.decode_leeway
