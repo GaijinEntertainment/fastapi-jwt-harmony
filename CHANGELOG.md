@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subclass rather than losing to it.
 - `configure()` with no `config` left the package unconfigured despite the
   argument being optional; it now applies `JWTHarmonyConfig()` defaults.
+- `release.sh` continued past a declined prompt and released an uncommitted
+  working tree. It now refuses, and the version-bump commit names the only file
+  it should carry.
 - The CSRF cookies ignored `access_csrf_cookie_path` and
   `refresh_csrf_cookie_path` and used the token cookie's path instead, when set
   and when cleared. Both settings had no effect at all.

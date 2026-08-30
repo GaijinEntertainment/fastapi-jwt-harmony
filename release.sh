@@ -144,14 +144,8 @@ check_clean_working_dir() {
         print_warning "Working directory is not clean. Uncommitted changes:"
         git status --short
         echo ""
-        read -p "Do you want to commit these changes first? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            print_status "Please commit your changes and run this script again"
-            exit 1
-        else
-            print_status "Continuing with uncommitted changes..."
-        fi
+        print_error "Commit or stash them before releasing: a release must describe a tree that exists in history"
+        exit 1
     fi
 }
 
@@ -192,7 +186,7 @@ main() {
 
             # Commit version change if there are changes
             if [ -n "$(git status --porcelain)" ]; then
-                git commit -m "chore: bump version to $VERSION"
+                git commit -m "chore: bump version to $VERSION" -- src/fastapi_jwt_harmony/version.py
                 git push origin HEAD
             fi
 
