@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-30
+
 ### Added
 - Python 3.14 in the classifiers and in all three CI matrices. The suite already
   passed there and `requires-python` already allowed it, so the support was real
