@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `release.sh` overwrote `version.py` wholesale, discarding its module
+  docstring on every release. It now rewrites only the assignment.
+
+
 ## [0.3.0] - 2026-08-30
 
 ### Fixed

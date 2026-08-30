@@ -74,7 +74,20 @@ check_existing_tag() {
 update_version() {
     local version=$1
     print_status "Updating version to $version in src/fastapi_jwt_harmony/version.py"
-    echo "__version__ = '$version'" > src/fastapi_jwt_harmony/version.py
+    # Rewrite the assignment, not the file: overwriting it discarded the module docstring
+    # on every release.
+    python3 - "$version" <<'PYTHON'
+import re
+import sys
+from pathlib import Path
+
+path = Path('src/fastapi_jwt_harmony/version.py')
+source = path.read_text()
+updated, count = re.subn(r"^__version__ = .*$", f"__version__ = '{sys.argv[1]}'", source, count=1, flags=re.MULTILINE)
+if count != 1:
+    sys.exit('version.py does not contain a single __version__ assignment')
+path.write_text(updated)
+PYTHON
 
     # Stage the version file
     git add src/fastapi_jwt_harmony/version.py
