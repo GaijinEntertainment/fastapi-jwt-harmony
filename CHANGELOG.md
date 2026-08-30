@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `JWTHarmony.configure()` left `JWTHarmonyWS` unconfigured, so every WebSocket
+  dependency raised `JWTHarmony is not configured`. Configuration is now held on
+  the shared base class, and configuring clears a value assigned directly onto a
+  subclass rather than losing to it.
+- `configure()` with no `config` left the package unconfigured despite the
+  argument being optional; it now applies `JWTHarmonyConfig()` defaults.
 - The CSRF cookies ignored `access_csrf_cookie_path` and
   `refresh_csrf_cookie_path` and used the token cookie's path instead, when set
   and when cleared. Both settings had no effect at all.
@@ -16,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read it as a default at all, so a project type-checking in strict mode saw
   all 29 of them as required and could not construct the config. The defaults
   are now passed as `default=`, with no change in behaviour.
+
+### Changed
+- A `denylist_callback` is now assigned on every `configure()` call, so passing
+  none withdraws one. It used to be set only when truthy, which made a callback
+  impossible to remove once installed and leaked it for the life of the process.
 
 ## [0.2.2] - 2026-07-03
 

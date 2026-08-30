@@ -15,26 +15,11 @@ from tests.user_models import SimpleUser
 # WebSocket tests require special handling since WebSocket doesn't use Request/Response
 
 
-def sync_websocket_config():
-    """Sync configuration from JWTHarmony to JWTHarmonyWS."""
-    JWTHarmonyWS._config = JWTHarmony._config
-    JWTHarmonyWS._user_model_class = JWTHarmony._user_model_class
-    JWTHarmonyWS._token_in_denylist_callback = JWTHarmony._token_in_denylist_callback
-
-
 @pytest.fixture(scope='function')
 def client():
-    # Reset configuration
-    JWTHarmony._config = None
-    JWTHarmonyWS._config = None
-    JWTHarmony._user_model_class = SimpleUser
-    JWTHarmonyWS._user_model_class = SimpleUser
-
-    # Load config for both classes
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(secret_key='testing', token_location='headers'))
 
     # Sync config to websocket class
-    sync_websocket_config()
 
     app = FastAPI()
 
@@ -253,8 +238,6 @@ def test_missing_cookie(url, client):
     # Set config to use cookies
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='testing'))
 
-    sync_websocket_config()
-
     cookie_key = 'access_token_cookie' if url != '/jwt-refresh-required-cookies' else 'refresh_token_cookie'
     with client.websocket_connect(url + '?csrf_token=') as websocket:
         data = websocket.receive_text()
@@ -264,8 +247,6 @@ def test_missing_cookie(url, client):
 @pytest.mark.parametrize('url', ['/jwt-required-cookies', '/jwt-refresh-required-cookies', '/fresh-jwt-required-cookies', '/jwt-optional-cookies'])
 def test_missing_csrf_token(url, client):
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret'))
-
-    sync_websocket_config()
 
     # required and optional
     client.get('/all-token')
@@ -283,8 +264,6 @@ def test_missing_csrf_token(url, client):
     # disable csrf protection
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret', cookie_csrf_protect=False))
 
-    sync_websocket_config()
-
     client.get('/all-token')
 
     msg = 'hello world' if url == '/jwt-optional-cookies' else 'Successfully Login!'
@@ -298,13 +277,9 @@ def test_missing_claim_csrf_in_token(url, client):
     # required and optional
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret', cookie_csrf_protect=False))
 
-    sync_websocket_config()
-
     client.get('/all-token')
 
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret'))
-
-    sync_websocket_config()
 
     with client.websocket_connect(url + '?csrf_token=test') as websocket:
         data = websocket.receive_text()
@@ -317,8 +292,6 @@ def test_missing_claim_csrf_in_token(url, client):
     # disable csrf protection
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret', cookie_csrf_protect=False))
 
-    sync_websocket_config()
-
     msg = 'hello world' if url == '/jwt-optional-cookies' else 'Successfully Login!'
     with client.websocket_connect(url + '?csrf_token=test') as websocket:
         data = websocket.receive_text()
@@ -329,8 +302,6 @@ def test_missing_claim_csrf_in_token(url, client):
 def test_invalid_csrf_double_submit(url, client):
     # required and optional
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret'))
-
-    sync_websocket_config()
 
     client.get('/all-token')
 
@@ -345,8 +316,6 @@ def test_invalid_csrf_double_submit(url, client):
     # disable csrf protection
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret', cookie_csrf_protect=False))
 
-    sync_websocket_config()
-
     msg = 'hello world' if url == '/jwt-optional-cookies' else 'Successfully Login!'
     with client.websocket_connect(url + '?csrf_token=test') as websocket:
         data = websocket.receive_text()
@@ -357,8 +326,6 @@ def test_invalid_csrf_double_submit(url, client):
 def test_valid_access_endpoint_with_csrf(url, client):
     # required and optional
     JWTHarmony.configure(SimpleUser, JWTHarmonyConfig(token_location='cookies', secret_key='secret'))
-
-    sync_websocket_config()
 
     res = client.get('/all-token')
     csrf_access = res.cookies.get('csrf_access_token')

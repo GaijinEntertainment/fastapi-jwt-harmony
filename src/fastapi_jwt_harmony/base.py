@@ -175,14 +175,24 @@ class JWTHarmonyBase(Generic[UserModelT]):
             config: JWT configuration (JWTHarmonyConfig instance or dict)
             denylist_callback: Optional function to check if token is denylisted
         """
-        cls._user_model_class = user_model_class
-        if config is not None:
-            if isinstance(config, dict):
-                cls._config = JWTHarmonyConfig(**config)
-            else:
-                cls._config = config
-        if denylist_callback:
-            cls._token_in_denylist_callback = denylist_callback
+        # Assigned on the base, not on `cls`: `JWTHarmony` and `JWTHarmonyWS` are siblings, and
+        # writing to whichever one was configured leaves the other permanently unconfigured.
+        # A value assigned directly onto a subclass would shadow the base through the MRO and
+        # survive this call, so configuring clears those first and is therefore authoritative.
+        for subclass in JWTHarmonyBase.__subclasses__():
+            for attribute in ('_config', '_user_model_class', '_token_in_denylist_callback'):
+                if attribute in vars(subclass):
+                    delattr(subclass, attribute)
+        JWTHarmonyBase._user_model_class = user_model_class
+        if config is None:
+            config = JWTHarmonyConfig()
+        elif isinstance(config, dict):
+            config = JWTHarmonyConfig(**config)
+        JWTHarmonyBase._config = config
+        # Assigned unconditionally, so passing none genuinely removes one. Setting it only when
+        # truthy made a callback impossible to withdraw once installed, and it outlived whatever
+        # configured it for the life of the process.
+        JWTHarmonyBase._token_in_denylist_callback = denylist_callback
 
     def get_unverified_jwt(self, encoded_token: Optional[str] = None) -> Optional[dict[str, Union[str, int, bool]]]:
         """
