@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The CSRF cookies ignored `access_csrf_cookie_path` and
+  `refresh_csrf_cookie_path` and used the token cookie's path instead, when set
+  and when cleared. Both settings had no effect at all.
 - `JWTHarmonyConfig` declared every field default positionally
   (`Field(None, ...)`). Pydantic v2 deprecated that form and pyright does not
   read it as a default at all, so a project type-checking in strict mode saw

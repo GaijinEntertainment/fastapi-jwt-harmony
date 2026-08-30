@@ -169,7 +169,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
 
         # Set CSRF cookie if protection is enabled
         if self.config.cookie_csrf_protect:
-            self._set_csrf_cookie(encoded_access_token, response, self.config.access_csrf_cookie_key, self.config.access_cookie_path, max_age)
+            self._set_csrf_cookie(encoded_access_token, response, self.config.access_csrf_cookie_key, self.config.access_csrf_cookie_path, max_age)
 
     def set_refresh_cookies(self, encoded_refresh_token: str, response: Optional[Response] = None, max_age: Optional[int] = None) -> None:
         """
@@ -203,7 +203,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
 
         # Set CSRF cookie if protection is enabled
         if self.config.cookie_csrf_protect:
-            self._set_csrf_cookie(encoded_refresh_token, response, self.config.refresh_csrf_cookie_key, self.config.refresh_cookie_path, max_age)
+            self._set_csrf_cookie(encoded_refresh_token, response, self.config.refresh_csrf_cookie_key, self.config.refresh_csrf_cookie_path, max_age)
 
     def unset_jwt_cookies(self, response: Optional[Response] = None) -> None:
         """
@@ -240,7 +240,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
         csrf_key = self.config.access_csrf_cookie_key
         response.delete_cookie(
             key=csrf_key,
-            path=self.config.access_cookie_path,
+            path=self.config.access_csrf_cookie_path,
             domain=self.config.cookie_domain,
             secure=self.config.cookie_secure,
             samesite=self.config.cookie_samesite,
@@ -271,7 +271,7 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
         csrf_key = self.config.refresh_csrf_cookie_key
         response.delete_cookie(
             key=csrf_key,
-            path=self.config.refresh_cookie_path,
+            path=self.config.refresh_csrf_cookie_path,
             domain=self.config.cookie_domain,
             secure=self.config.cookie_secure,
             samesite=self.config.cookie_samesite,
