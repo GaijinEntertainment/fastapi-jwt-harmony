@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Python 3.14 in the classifiers and in all three CI matrices. The suite already
+  passed there and `requires-python` already allowed it, so the support was real
+  but neither declared nor guarded.
+
 ### Fixed
 - `release.sh` overwrote `version.py` wholesale, discarding its module
   docstring on every release. It now rewrites only the assignment.
