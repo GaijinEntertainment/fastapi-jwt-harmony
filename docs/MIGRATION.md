@@ -73,8 +73,8 @@ def check_if_token_revoked(decrypted_token):
 JWTHarmony.configure(
     User,
     JWTHarmonyConfig(
-        authjwt_secret_key="secret",  # pragma: allowlist secret
-        authjwt_denylist_enabled=True
+        secret_key="secret",  # pragma: allowlist secret
+        denylist_enabled=True
     ),
     denylist_callback=check_if_token_revoked
 )
@@ -216,8 +216,8 @@ from fastapi_jwt_harmony import JWTHarmony, JWTHarmonyConfig, JWTHarmonyDep
 JWTHarmony.configure(
     User,
     JWTHarmonyConfig(
-        authjwt_secret_key=SECRET_KEY,  # pragma: allowlist secret
-        authjwt_algorithm=ALGORITHM
+        secret_key=SECRET_KEY,  # pragma: allowlist secret
+        algorithm=ALGORITHM
     )
 )
 
@@ -267,8 +267,8 @@ from fastapi_jwt_harmony import JWTHarmony, JWTHarmonyConfig, JWTHarmonyDep
 JWTHarmony.configure(
     User,
     JWTHarmonyConfig(
-        authjwt_secret_key=SECRET_KEY,  # pragma: allowlist secret
-        authjwt_access_token_expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        secret_key=SECRET_KEY,  # pragma: allowlist secret
+        access_token_expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 )
 

@@ -124,6 +124,10 @@ async def websocket_endpoint_token(
     WebSocket endpoint using token from query parameter.
 
     Connect with: ws://localhost:8000/ws/token?token=YOUR_JWT_TOKEN
+
+    A URL is recorded where a header is not - proxy and server access logs, browser
+    history, Referer - so the cookie-based endpoint below is the safer default, and a
+    token passed this way should be short-lived.
     """
     try:
         # Authenticate using token from query parameter
@@ -286,14 +290,14 @@ def get_chat_page() -> HTMLResponse:
                     const data = await response.json();
                     if (response.ok) {
                         token = data.access_token;
-                        document.getElementById('loginResult').innerHTML =
+                        document.getElementById('loginResult').textContent =
                             `Logged in as ${data.user.username} (${data.user.room})`;
                     } else {
-                        document.getElementById('loginResult').innerHTML =
+                        document.getElementById('loginResult').textContent =
                             `Login failed: ${data.detail}`;
                     }
                 } catch (error) {
-                    document.getElementById('loginResult').innerHTML =
+                    document.getElementById('loginResult').textContent =
                         `Login error: ${error.message}`;
                 }
             }
@@ -316,9 +320,8 @@ def get_chat_page() -> HTMLResponse:
 
             function setupWebSocket() {
                 ws.onmessage = function(event) {
-                    const messages = document.getElementById('messages');
-                    messages.innerHTML += '<div>' + event.data + '</div>';
-                    messages.scrollTop = messages.scrollHeight;
+                    // textContent, never innerHTML: anyone on /ws/optional can broadcast markup.
+                    appendMessage(event.data, false);
                 };
 
                 ws.onopen = function(event) {
@@ -349,10 +352,20 @@ def get_chat_page() -> HTMLResponse:
                 }
             }
 
-            function addMessage(message) {
+            function appendMessage(text, emphasised) {
                 const messages = document.getElementById('messages');
-                messages.innerHTML += '<div><em>' + message + '</em></div>';
+                const line = document.createElement('div');
+                const body = emphasised ? document.createElement('em') : line;
+                body.textContent = text;
+                if (emphasised) {
+                    line.appendChild(body);
+                }
+                messages.appendChild(line);
                 messages.scrollTop = messages.scrollHeight;
+            }
+
+            function addMessage(message) {
+                appendMessage(message, true);
             }
 
             // Send message on Enter key

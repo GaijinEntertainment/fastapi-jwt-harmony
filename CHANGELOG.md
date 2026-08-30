@@ -31,6 +31,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   none withdraws one. It used to be set only when truthy, which made a callback
   impossible to remove once installed and leaked it for the life of the process.
 
+### Documentation
+- The README, API reference and migration guide configured `JWTHarmonyConfig`
+  with `authjwt_`-prefixed names, which pydantic drops in silence: anyone
+  following them ended up with no signing key. They now use the real field
+  names.
+- Removed `from_env()` and `from_file()` from the API reference, and corrected
+  the token-validation signatures, none of which exist.
+- The WebSocket example rendered received messages with `innerHTML`, so anyone
+  on the anonymous endpoint could broadcast markup into every open page. It
+  renders text now, and the query-parameter token carries a note about where a
+  URL is recorded.
+
 ## [0.2.2] - 2026-07-03
 
 ### Security

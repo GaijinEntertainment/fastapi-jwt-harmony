@@ -45,6 +45,10 @@ def _create_http_dependency(method: Literal['required', 'optional', 'refresh', '
     return dependency
 
 
+# The WebSocket dependencies read the token from a query parameter, because the browser WebSocket
+# API cannot send an Authorization header. A URL is recorded in far more places than a header is —
+# server and proxy access logs, browser history, Referer — so prefer a cookie where the connection
+# is same-origin, and treat a token sent this way as short-lived.
 def _create_websocket_dependency(
     method: Literal['bare', 'required', 'optional', 'refresh', 'fresh'], token_required: bool = False
 ) -> Callable[..., JWTHarmonyWS[UserModelT]]:

@@ -119,7 +119,7 @@ class User(BaseModel):
     id: str
     username: str
 
-JWTHarmony.configure(User, JWTHarmonyConfig(authjwt_secret_key="secret"))  # pragma: allowlist secret
+JWTHarmony.configure(User, JWTHarmonyConfig(secret_key="secret"))  # pragma: allowlist secret
 
 @app.get("/protected")
 def protected(auth: JWTHarmony[User] = Depends(JWTHarmonyDep)):
@@ -132,9 +132,9 @@ Secure cookie-based auth with CSRF protection:
 JWTHarmony.configure(
     User,
     JWTHarmonyConfig(
-        authjwt_secret_key="secret",  # pragma: allowlist secret
-        authjwt_token_location={"cookies"},
-        authjwt_cookie_csrf_protect=True
+        secret_key="secret",  # pragma: allowlist secret
+        token_location={"cookies"},
+        cookie_csrf_protect=True
     )
 )
 ```

@@ -19,53 +19,48 @@ The main configuration class using Pydantic for validation.
 ```python
 class JWTHarmonyConfig(BaseSettings):
     # Core settings
-    authjwt_secret_key: str | None = None
-    authjwt_public_key: str | None = None
-    authjwt_private_key: str | None = None
-    authjwt_algorithm: str = "HS256"
-    authjwt_decode_algorithms: list[str] | None = None
-    authjwt_decode_leeway: int = 0
-    authjwt_encode_issuer: str | None = None
-    authjwt_decode_issuer: str | None = None
-    authjwt_decode_audience: str | list[str] | None = None
+    secret_key: str | None = None
+    public_key: str | None = None
+    private_key: str | None = None
+    algorithm: str = "HS256"
+    decode_algorithms: list[str] | None = None
+    decode_leeway: int = 0
+    encode_issuer: str | None = None
+    decode_issuer: str | None = None
+    decode_audience: str | list[str] | None = None
 
     # Token location and validation
-    authjwt_token_location: frozenset[Literal["headers", "cookies"]] = frozenset({"cookies"})
-    authjwt_denylist_enabled: bool = False
-    authjwt_denylist_token_checks: set[str] = {"access", "refresh"}
+    token_location: frozenset[Literal["headers", "cookies"]] = frozenset({"cookies"})
+    denylist_enabled: bool = False
+    denylist_token_checks: set[str] = {"access", "refresh"}
 
     # Headers configuration
-    authjwt_header_name: str = "Authorization"
-    authjwt_header_type: str = "Bearer"
+    header_name: str = "Authorization"
+    header_type: str = "Bearer"
 
     # Token expiration
-    authjwt_access_token_expires: bool | int | timedelta = 900  # 15 minutes
-    authjwt_refresh_token_expires: bool | int | timedelta = 2592000  # 30 days
+    access_token_expires: bool | int | timedelta = 900  # 15 minutes
+    refresh_token_expires: bool | int | timedelta = 2592000  # 30 days
 
     # Cookies configuration
-    authjwt_access_cookie_key: str = "access_token_cookie"
-    authjwt_refresh_cookie_key: str = "refresh_token_cookie"
-    authjwt_access_cookie_path: str = "/"
-    authjwt_refresh_cookie_path: str = "/"
-    authjwt_cookie_domain: str | None = None
-    authjwt_cookie_secure: bool = False
-    authjwt_cookie_samesite: str | None = None
+    access_cookie_key: str = "access_token_cookie"
+    refresh_cookie_key: str = "refresh_token_cookie"
+    access_cookie_path: str = "/"
+    refresh_cookie_path: str = "/"
+    cookie_domain: str | None = None
+    cookie_secure: bool = False
+    cookie_samesite: str | None = None
 
     # CSRF protection
-    authjwt_cookie_csrf_protect: bool = True
-    authjwt_access_csrf_cookie_key: str = "csrf_access_token"
-    authjwt_refresh_csrf_cookie_key: str = "csrf_refresh_token"
-    authjwt_access_csrf_cookie_path: str = "/"
-    authjwt_refresh_csrf_cookie_path: str = "/"
-    authjwt_access_csrf_header_name: str = "X-CSRF-Token"
-    authjwt_refresh_csrf_header_name: str = "X-CSRF-Token"
-    authjwt_csrf_methods: set[str] = {"POST", "PUT", "DELETE", "PATCH"}
+    cookie_csrf_protect: bool = True
+    access_csrf_cookie_key: str = "csrf_access_token"
+    refresh_csrf_cookie_key: str = "csrf_refresh_token"
+    access_csrf_cookie_path: str = "/"
+    refresh_csrf_cookie_path: str = "/"
+    access_csrf_header_name: str = "X-CSRF-Token"
+    refresh_csrf_header_name: str = "X-CSRF-Token"
+    csrf_methods: set[str] = {"POST", "PUT", "DELETE", "PATCH"}
 ```
-
-#### Configuration Methods
-
-- **from_env()**: Load configuration from environment variables
-- **from_file()**: Load configuration from JSON/YAML file
 
 ## Main Classes
 
@@ -127,25 +122,25 @@ Create a new refresh token.
 #### Token Validation
 
 ```python
-def jwt_required(self, auth_from: str = "request", token: Optional[str] = None, verify_type: bool = True) -> None
+def jwt_required(self) -> None
 ```
 
 Verify JWT token is present and valid.
 
 ```python
-def jwt_optional(self, auth_from: str = "request", token: Optional[str] = None, verify_type: bool = True) -> None
+def jwt_optional(self) -> None
 ```
 
 Optionally verify JWT token if present.
 
 ```python
-def jwt_refresh_token_required(self, auth_from: str = "request", token: Optional[str] = None) -> None
+def jwt_refresh_token_required(self) -> None
 ```
 
 Verify refresh token is present and valid.
 
 ```python
-def fresh_jwt_required(self, auth_from: str = "request", token: Optional[str] = None) -> None
+def fresh_jwt_required(self) -> None
 ```
 
 Verify fresh access token is present and valid.
@@ -425,11 +420,11 @@ class User(BaseModel):
     username: str
 
 # Simple configuration with dictionary
-JWTHarmony.configure(User, {"authjwt_secret_key": "secret"})  # pragma: allowlist secret
+JWTHarmony.configure(User, {"secret_key": "secret"})  # pragma: allowlist secret
 
 # Or with JWTHarmonyConfig object for advanced usage
 # from fastapi_jwt_harmony import JWTHarmonyConfig
-# JWTHarmony.configure(User, JWTHarmonyConfig(authjwt_secret_key="secret"))  # pragma: allowlist secret
+# JWTHarmony.configure(User, JWTHarmonyConfig(secret_key="secret"))  # pragma: allowlist secret
 
 @app.get("/protected")
 def protected(auth: JWTHarmony[User] = Depends(JWTHarmonyDep)):
@@ -443,13 +438,13 @@ from datetime import timedelta
 
 # With dictionary (simple)
 config_dict = {
-    "authjwt_secret_key": "your-secret-key",  # pragma: allowlist secret
-    "authjwt_token_location": {"headers", "cookies"},
-    "authjwt_access_token_expires": timedelta(minutes=15),
-    "authjwt_refresh_token_expires": timedelta(days=30),
-    "authjwt_cookie_csrf_protect": True,
-    "authjwt_cookie_secure": True,
-    "authjwt_cookie_samesite": "strict",
+    "secret_key": "your-secret-key",  # pragma: allowlist secret
+    "token_location": {"headers", "cookies"},
+    "access_token_expires": timedelta(minutes=15),
+    "refresh_token_expires": timedelta(days=30),
+    "cookie_csrf_protect": True,
+    "cookie_secure": True,
+    "cookie_samesite": "strict",
 }
 
 JWTHarmony.configure(User, config_dict)
@@ -457,13 +452,13 @@ JWTHarmony.configure(User, config_dict)
 # Or with JWTHarmonyConfig object (advanced)
 # from fastapi_jwt_harmony import JWTHarmonyConfig
 # config = JWTHarmonyConfig(
-#     authjwt_secret_key="your-secret-key",  # pragma: allowlist secret
-#     authjwt_token_location={"headers", "cookies"},
-#     authjwt_access_token_expires=timedelta(minutes=15),
-#     authjwt_refresh_token_expires=timedelta(days=30),
-#     authjwt_cookie_csrf_protect=True,
-#     authjwt_cookie_secure=True,
-#     authjwt_cookie_samesite="strict",
+#     secret_key="your-secret-key",  # pragma: allowlist secret
+#     token_location={"headers", "cookies"},
+#     access_token_expires=timedelta(minutes=15),
+#     refresh_token_expires=timedelta(days=30),
+#     cookie_csrf_protect=True,
+#     cookie_secure=True,
+#     cookie_samesite="strict",
 # )
 # JWTHarmony.configure(User, config)
 ```
@@ -479,8 +474,8 @@ def check_if_token_revoked(jwt_payload: dict) -> bool:
 JWTHarmony.configure(
     User,
     {
-        "authjwt_secret_key": "secret",  # pragma: allowlist secret
-        "authjwt_denylist_enabled": True,
+        "secret_key": "secret",  # pragma: allowlist secret
+        "denylist_enabled": True,
     },
     denylist_callback=check_if_token_revoked
 )
