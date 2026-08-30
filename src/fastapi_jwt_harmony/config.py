@@ -73,46 +73,46 @@ class JWTHarmonyConfig(BaseModel):
         csrf_methods (set[str]): Set of HTTP methods that require CSRF validation.
     """
 
-    token_location: frozenset[Literal['headers', 'cookies']] = Field(frozenset(['cookies']), description='Location of the JWT (headers or cookies)')
-    secret_key: str | None = Field(None, description='Secret key for signing JWTs')
-    public_key: str | None = Field(None, description='Public key for asymmetric signature validation')
-    private_key: str | None = Field(None, description='Private key for asymmetric signature generation')
-    algorithm: str = Field('HS256', description='Algorithm for signing and decoding JWTs')
-    decode_algorithms: list[str] | None = Field(None, description='Allowed algorithms for decoding JWTs')
-    decode_leeway: int | timedelta = Field(0, description='Leeway duration for clock skew when validating token expiration claims')
-    encode_issuer: str | None = Field(None, description='Issuer claim for encoding JWTs')
-    decode_issuer: str | None = Field(None, description='Expected issuer claim for decoding JWTs')
-    decode_audience: str | set[str] | None = Field(None, description='Expected audience identifiers for validating tokens')
-    denylist_enabled: bool = Field(False, description='Enable or disable the denylist feature')
+    token_location: frozenset[Literal['headers', 'cookies']] = Field(default=frozenset(['cookies']), description='Location of the JWT (headers or cookies)')
+    secret_key: str | None = Field(default=None, description='Secret key for signing JWTs')
+    public_key: str | None = Field(default=None, description='Public key for asymmetric signature validation')
+    private_key: str | None = Field(default=None, description='Private key for asymmetric signature generation')
+    algorithm: str = Field(default='HS256', description='Algorithm for signing and decoding JWTs')
+    decode_algorithms: list[str] | None = Field(default=None, description='Allowed algorithms for decoding JWTs')
+    decode_leeway: int | timedelta = Field(default=0, description='Leeway duration for clock skew when validating token expiration claims')
+    encode_issuer: str | None = Field(default=None, description='Issuer claim for encoding JWTs')
+    decode_issuer: str | None = Field(default=None, description='Expected issuer claim for decoding JWTs')
+    decode_audience: str | set[str] | None = Field(default=None, description='Expected audience identifiers for validating tokens')
+    denylist_enabled: bool = Field(default=False, description='Enable or disable the denylist feature')
     denylist_token_checks: set[str] = Field(
         default_factory=lambda: {'access', 'refresh'},
         description='Token types to check against the denylist',
     )
-    header_name: str = Field('Authorization', description='HTTP header name for the JWT')
-    header_type: str = Field('Bearer', description='Type of the header, e.g., Bearer')
+    header_name: str = Field(default='Authorization', description='HTTP header name for the JWT')
+    header_type: str = Field(default='Bearer', description='Type of the header, e.g., Bearer')
     access_token_expires: bool | int | timedelta = Field(
-        int(timedelta(minutes=15).total_seconds()),
+        default=int(timedelta(minutes=15).total_seconds()),
         description='Expiration time for access tokens',
     )
     refresh_token_expires: bool | int | timedelta = Field(
-        int(timedelta(days=30).total_seconds()),
+        default=int(timedelta(days=30).total_seconds()),
         description='Expiration time for refresh tokens',
     )
-    access_cookie_key: str = Field('access_token_cookie', description='Key for the access token cookie')
-    refresh_cookie_key: str = Field('refresh_token_cookie', description='Key for the refresh token cookie')
-    access_cookie_path: str = Field('/', description='Path scope for the access token cookie')
-    refresh_cookie_path: str = Field('/', description='Path scope for the refresh token cookie')
-    cookie_domain: str | None = Field(None, description='Domain scope for the cookies')
-    cookie_secure: bool = Field(False, description='Require secure connection (HTTPS) for cookies')
-    cookie_samesite: Literal['strict', 'lax', 'none'] | None = Field(None, description='SameSite attribute for cookies (strict, lax, none)')
+    access_cookie_key: str = Field(default='access_token_cookie', description='Key for the access token cookie')
+    refresh_cookie_key: str = Field(default='refresh_token_cookie', description='Key for the refresh token cookie')
+    access_cookie_path: str = Field(default='/', description='Path scope for the access token cookie')
+    refresh_cookie_path: str = Field(default='/', description='Path scope for the refresh token cookie')
+    cookie_domain: str | None = Field(default=None, description='Domain scope for the cookies')
+    cookie_secure: bool = Field(default=False, description='Require secure connection (HTTPS) for cookies')
+    cookie_samesite: Literal['strict', 'lax', 'none'] | None = Field(default=None, description='SameSite attribute for cookies (strict, lax, none)')
 
-    cookie_csrf_protect: bool = Field(True, description='Enable double-submit CSRF protection')
-    access_csrf_cookie_key: str = Field('csrf_access_token', description='Key for the CSRF cookie associated with the access token')
-    refresh_csrf_cookie_key: str = Field('csrf_refresh_token', description='Key for the CSRF cookie associated with the refresh token')
-    access_csrf_cookie_path: str = Field('/', description="Path scope for the access token's CSRF cookie")
-    refresh_csrf_cookie_path: str = Field('/', description="Path scope for the refresh token's CSRF cookie")
-    access_csrf_header_name: str = Field('X-CSRF-Token', description='HTTP header name for the CSRF token for access tokens')
-    refresh_csrf_header_name: str = Field('X-CSRF-Token', description='HTTP header name for the CSRF token for refresh tokens')
+    cookie_csrf_protect: bool = Field(default=True, description='Enable double-submit CSRF protection')
+    access_csrf_cookie_key: str = Field(default='csrf_access_token', description='Key for the CSRF cookie associated with the access token')
+    refresh_csrf_cookie_key: str = Field(default='csrf_refresh_token', description='Key for the CSRF cookie associated with the refresh token')
+    access_csrf_cookie_path: str = Field(default='/', description="Path scope for the access token's CSRF cookie")
+    refresh_csrf_cookie_path: str = Field(default='/', description="Path scope for the refresh token's CSRF cookie")
+    access_csrf_header_name: str = Field(default='X-CSRF-Token', description='HTTP header name for the CSRF token for access tokens')
+    refresh_csrf_header_name: str = Field(default='X-CSRF-Token', description='HTTP header name for the CSRF token for refresh tokens')
     csrf_methods: set[str] = Field(
         default_factory=lambda: {'POST', 'PUT', 'DELETE', 'PATCH'},
         description='HTTP methods that require CSRF validation',

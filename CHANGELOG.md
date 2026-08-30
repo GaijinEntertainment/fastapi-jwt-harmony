@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `JWTHarmonyConfig` declared every field default positionally
+  (`Field(None, ...)`). Pydantic v2 deprecated that form and pyright does not
+  read it as a default at all, so a project type-checking in strict mode saw
+  all 29 of them as required and could not construct the config. The defaults
+  are now passed as `default=`, with no change in behaviour.
+
 ## [0.2.2] - 2026-07-03
 
 ### Security
