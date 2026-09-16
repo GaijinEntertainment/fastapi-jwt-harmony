@@ -131,6 +131,60 @@ resolve_release_remote() {
     exit 1
 }
 
+# Wait for CI to conclude on a commit. The release workflow refuses a tag whose commit carries no
+# successful CI run, so a tag pushed straight after the version commit fails the release on its
+# first job. The run is found by commit and by workflow file rather than by display name, so
+# renaming the workflow cannot turn this into a silent timeout. RELEASE_SKIP_CI_WAIT=1 skips it.
+wait_for_ci() {
+    local sha=$1
+    local ci_workflow='ci.yml'
+    local attempt run status conclusion
+
+    if [ -n "${RELEASE_SKIP_CI_WAIT:-}" ]; then
+        print_warning "Skipping the CI wait; the release fails if CI has not passed on $sha"
+        return
+    fi
+
+    print_status "Waiting for CI on $sha"
+
+    for attempt in $(seq 1 60); do
+        # `.[0] // empty` prints nothing when no run matched. Without it jq interpolates the
+        # missing object and prints the literal "null", which reads as a run that has not started.
+        run=$(gh run list --commit "$sha" --workflow "$ci_workflow" --limit 1 \
+            --json status,conclusion -q '.[0] // empty | "\(.status) \(.conclusion // "")"' 2>/dev/null || true)
+
+        if [ -z "$run" ] || [ "${run%% *}" = "null" ]; then
+            # No run was scheduled. ci.yml triggers on pushes to main and develop and on pull
+            # requests, so a release cut from any other branch never gets one. Name that cause
+            # rather than letting the loop expire and blame elapsed time.
+            if [ "$attempt" -ge 12 ]; then
+                print_error "No CI run exists for $sha on branch $(git rev-parse --abbrev-ref HEAD)"
+                print_error ".github/workflows/$ci_workflow runs on pushes to main and develop"
+                print_error "Release from such a branch, or set RELEASE_SKIP_CI_WAIT=1 to tag without the check"
+                exit 1
+            fi
+        else
+            status=${run%% *}
+            conclusion=${run#* }
+
+            if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                    print_success "CI passed on $sha"
+                    return
+                fi
+
+                print_error "CI concluded '$conclusion' on $sha; not tagging a commit the release would reject"
+                exit 1
+            fi
+        fi
+
+        sleep 10
+    done
+
+    print_error "CI did not finish within 10 minutes for $sha"
+    exit 1
+}
+
 # Create and push tag
 create_tag() {
     local remote=$1
@@ -180,6 +234,8 @@ show_help() {
     echo "Environment:"
     echo "  RELEASE_REMOTE           Remote to release to. Defaults to the remote whose"
     echo "                           URL matches the repository gh reports."
+    echo "  RELEASE_SKIP_CI_WAIT     Tag without waiting for CI on the version commit."
+    echo "                           The release workflow still requires it to have passed."
 }
 
 # Check working directory is clean
@@ -237,6 +293,7 @@ main() {
                 git push "$REMOTE" HEAD
             fi
 
+            wait_for_ci "$(git rev-parse HEAD)"
             create_tag "$REMOTE" "$TAG" "$VERSION"
 
             print_success "Release $TAG created successfully!"
