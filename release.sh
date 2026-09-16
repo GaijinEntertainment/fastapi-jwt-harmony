@@ -93,16 +93,55 @@ PYTHON
     git add src/fastapi_jwt_harmony/version.py
 }
 
+# Reduce a remote URL to `owner/repo`, lower-cased, for both the ssh and the https form.
+repo_path_of() {
+    local url=${1%.git}
+    url=${url//://}
+    url=${url%/}
+
+    local repo=${url##*/}
+    local rest=${url%/*}
+    local owner=${rest##*/}
+
+    printf '%s/%s' "$owner" "$repo" | tr '[:upper:]' '[:lower:]'
+}
+
+# Name the remote that points at the repository being released. A clone whose upstream moved keeps
+# the old URL under `origin`, and pushing a release there delivers it to the wrong repository
+# without a word. The whole `owner/repo` is compared, so a fork sharing the prefix does not match.
+# Errors go to stderr: the caller reads this function through a command substitution.
+resolve_release_remote() {
+    if [ -n "${RELEASE_REMOTE:-}" ]; then
+        echo "$RELEASE_REMOTE"
+        return
+    fi
+
+    local target remote
+    target=$(gh repo view --json nameWithOwner -q .nameWithOwner | tr '[:upper:]' '[:lower:]')
+
+    for remote in $(git remote); do
+        if [ "$(repo_path_of "$(git remote get-url "$remote")")" = "$target" ]; then
+            echo "$remote"
+            return
+        fi
+    done
+
+    print_error "No git remote points at $target" >&2
+    print_error "Add one, or set RELEASE_REMOTE=<remote> to name the one that receives the release" >&2
+    exit 1
+}
+
 # Create and push tag
 create_tag() {
-    local tag=$1
-    local version=$2
+    local remote=$1
+    local tag=$2
+    local version=$3
 
     print_status "Creating tag $tag"
     git tag -a "$tag" -m "Release $version"
 
-    print_status "Pushing tag to GitHub"
-    git push origin "$tag"
+    print_status "Pushing tag to remote '$remote'"
+    git push "$remote" "$tag"
 }
 
 # Create pre-release
@@ -137,6 +176,10 @@ show_help() {
     echo "  - GitHub CLI (gh) installed and authenticated"
     echo "  - Clean working directory (all changes committed)"
     echo "  - Push access to the repository"
+    echo ""
+    echo "Environment:"
+    echo "  RELEASE_REMOTE           Remote to release to. Defaults to the remote whose"
+    echo "                           URL matches the repository gh reports."
 }
 
 # Check working directory is clean
@@ -182,16 +225,19 @@ main() {
                 exit 0
             fi
 
+            REMOTE=$(resolve_release_remote)
+            print_status "Releasing to remote '$REMOTE'"
+
             # Create release
             update_version "$VERSION"
 
             # Commit version change if there are changes
             if [ -n "$(git status --porcelain)" ]; then
                 git commit -m "chore: bump version to $VERSION" -- src/fastapi_jwt_harmony/version.py
-                git push origin HEAD
+                git push "$REMOTE" HEAD
             fi
 
-            create_tag "$TAG" "$VERSION"
+            create_tag "$REMOTE" "$TAG" "$VERSION"
 
             print_success "Release $TAG created successfully!"
             print_status "GitHub Actions will now:"
