@@ -152,40 +152,102 @@ def set_access_cookies(
     self,
     encoded_access_token: str,
     response: Optional[Response] = None,
-    max_age: Optional[int] = None
+    max_age: Optional[int] = None,
+    *,
+    key: Optional[str] = None,
+    path: Optional[str] = None,
+    domain: Optional[str] = None,
+    samesite: Optional[Literal['strict', 'lax', 'none']] = None,
+    csrf_key: Optional[str] = None,
+    csrf_path: Optional[str] = None
 ) -> None
 ```
 
-Set access token cookie.
+Set access token cookie. `key`, `path`, `domain`, `csrf_key` and `csrf_path`
+address the cookies for this call; each falls back to its configured value.
+`domain` and `samesite` cover the token cookie and its CSRF cookie together, the
+two belonging to one site.
+
+`samesite` shapes a cookie rather than addressing it, so it is offered on the
+setters only: a browser identifies a cookie by name, domain and path, and clears
+it whatever SameSite the deletion carries. `samesite='none'` raises `ValueError`
+unless `cookie_secure` is set, the rule browsers enforce.
+
+`cookie_secure` has no per-call form. It is the one attribute whose per-call
+value could only weaken a cookie, and no request-scoped reason to weaken one
+exists.
 
 ```python
 def set_refresh_cookies(
     self,
     encoded_refresh_token: str,
     response: Optional[Response] = None,
-    max_age: Optional[int] = None
+    max_age: Optional[int] = None,
+    *,
+    key: Optional[str] = None,
+    path: Optional[str] = None,
+    domain: Optional[str] = None,
+    samesite: Optional[Literal['strict', 'lax', 'none']] = None,
+    csrf_key: Optional[str] = None,
+    csrf_path: Optional[str] = None
 ) -> None
 ```
 
-Set refresh token cookie.
+Set refresh token cookie, with the same per-call addressing.
 
 ```python
-def unset_jwt_cookies(self, response: Optional[Response] = None) -> None
+def unset_jwt_cookies(
+    self,
+    response: Optional[Response] = None,
+    *,
+    access_key: Optional[str] = None,
+    access_path: Optional[str] = None,
+    access_domain: Optional[str] = None,
+    access_csrf_key: Optional[str] = None,
+    access_csrf_path: Optional[str] = None,
+    refresh_key: Optional[str] = None,
+    refresh_path: Optional[str] = None,
+    refresh_domain: Optional[str] = None,
+    refresh_csrf_key: Optional[str] = None,
+    refresh_csrf_path: Optional[str] = None
+) -> None
 ```
 
-Remove all JWT cookies.
+Remove all four JWT cookies in one call. The access and refresh halves are named
+separately, because a scoped application gives them paths of their own; each
+argument falls back to its configured value, so a half that names nothing clears
+the configured cookies of that half.
 
 ```python
-def unset_access_cookies(self, response: Optional[Response] = None) -> None
+def unset_access_cookies(
+    self,
+    response: Optional[Response] = None,
+    *,
+    key: Optional[str] = None,
+    path: Optional[str] = None,
+    domain: Optional[str] = None,
+    csrf_key: Optional[str] = None,
+    csrf_path: Optional[str] = None
+) -> None
 ```
 
-Remove access token cookies.
+Remove access token cookies. A cookie is cleared only where it was set, so a
+call that addressed one addresses it again here — domain included.
 
 ```python
-def unset_refresh_cookies(self, response: Optional[Response] = None) -> None
+def unset_refresh_cookies(
+    self,
+    response: Optional[Response] = None,
+    *,
+    key: Optional[str] = None,
+    path: Optional[str] = None,
+    domain: Optional[str] = None,
+    csrf_key: Optional[str] = None,
+    csrf_path: Optional[str] = None
+) -> None
 ```
 
-Remove refresh token cookies.
+Remove refresh token cookies, with the same per-call addressing.
 
 #### Token Information
 

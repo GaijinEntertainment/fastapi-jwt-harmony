@@ -2,7 +2,7 @@
 
 import hmac
 from datetime import timedelta
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from fastapi import Request, Response
 
@@ -137,7 +137,19 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
         """
         self._authenticate('access', self.config.access_cookie_key, self.config.access_csrf_header_name, fresh=True)
 
-    def set_access_cookies(self, encoded_access_token: str, response: Optional[Response] = None, max_age: Optional[int] = None) -> None:
+    def set_access_cookies(
+        self,
+        encoded_access_token: str,
+        response: Optional[Response] = None,
+        max_age: Optional[int] = None,
+        *,
+        key: Optional[str] = None,
+        path: Optional[str] = None,
+        domain: Optional[str] = None,
+        samesite: Optional[Literal['strict', 'lax', 'none']] = None,
+        csrf_key: Optional[str] = None,
+        csrf_path: Optional[str] = None,
+    ) -> None:
         """
         Set access token cookies with optional CSRF protection.
 
@@ -145,6 +157,15 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             encoded_access_token: The encoded JWT access token
             response: Optional response object (uses instance response if not provided)
             max_age: Optional max age for the cookie in seconds
+            key: Cookie name for this call, in place of `access_cookie_key`
+            path: Cookie path for this call, in place of `access_cookie_path`
+            domain: Cookie domain for this call, in place of `cookie_domain`; it covers the CSRF cookie too, the two belonging to one site
+            samesite: SameSite for this call, in place of `cookie_samesite`; it covers the CSRF cookie too
+            csrf_key: CSRF cookie name for this call, in place of `access_csrf_cookie_key`
+            csrf_path: CSRF cookie path for this call, in place of `access_csrf_cookie_path`
+
+        Raises:
+            ValueError: If `samesite` is 'none' while `cookie_secure` is False, a combination browsers reject
         """
         response = response or self._response
         if not response:
@@ -155,23 +176,46 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             max_age = self._get_cookie_max_age(self.config.access_token_expires)
 
         # Set main access token cookie
-        cookie_key = self.config.access_cookie_key
+        cookie_key = key if key is not None else self.config.access_cookie_key
+        cookie_path = path if path is not None else self.config.access_cookie_path
+        cookie_domain = domain if domain is not None else self.config.cookie_domain
+        cookie_samesite = self._resolve_samesite(samesite)
         response.set_cookie(
             key=cookie_key,
             value=encoded_access_token,
             max_age=max_age,
-            path=self.config.access_cookie_path,
-            domain=self.config.cookie_domain,
+            path=cookie_path,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             httponly=True,
-            samesite=self.config.cookie_samesite,
+            samesite=cookie_samesite,
         )
 
         # Set CSRF cookie if protection is enabled
         if self.config.cookie_csrf_protect:
-            self._set_csrf_cookie(encoded_access_token, response, self.config.access_csrf_cookie_key, self.config.access_csrf_cookie_path, max_age)
+            self._set_csrf_cookie(
+                encoded_access_token,
+                response,
+                csrf_key if csrf_key is not None else self.config.access_csrf_cookie_key,
+                csrf_path if csrf_path is not None else self.config.access_csrf_cookie_path,
+                cookie_domain,
+                cookie_samesite,
+                max_age,
+            )
 
-    def set_refresh_cookies(self, encoded_refresh_token: str, response: Optional[Response] = None, max_age: Optional[int] = None) -> None:
+    def set_refresh_cookies(
+        self,
+        encoded_refresh_token: str,
+        response: Optional[Response] = None,
+        max_age: Optional[int] = None,
+        *,
+        key: Optional[str] = None,
+        path: Optional[str] = None,
+        domain: Optional[str] = None,
+        samesite: Optional[Literal['strict', 'lax', 'none']] = None,
+        csrf_key: Optional[str] = None,
+        csrf_path: Optional[str] = None,
+    ) -> None:
         """
         Set refresh token cookies with optional CSRF protection.
 
@@ -179,6 +223,15 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             encoded_refresh_token: The encoded JWT refresh token
             response: Optional response object (uses instance response if not provided)
             max_age: Optional max age for the cookie in seconds
+            key: Cookie name for this call, in place of `refresh_cookie_key`
+            path: Cookie path for this call, in place of `refresh_cookie_path`
+            domain: Cookie domain for this call, in place of `cookie_domain`; it covers the CSRF cookie too, the two belonging to one site
+            samesite: SameSite for this call, in place of `cookie_samesite`; it covers the CSRF cookie too
+            csrf_key: CSRF cookie name for this call, in place of `refresh_csrf_cookie_key`
+            csrf_path: CSRF cookie path for this call, in place of `refresh_csrf_cookie_path`
+
+        Raises:
+            ValueError: If `samesite` is 'none' while `cookie_secure` is False, a combination browsers reject
         """
         response = response or self._response
         if not response:
@@ -189,95 +242,195 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             max_age = self._get_cookie_max_age(self.config.refresh_token_expires)
 
         # Set main refresh token cookie
-        cookie_key = self.config.refresh_cookie_key
+        cookie_key = key if key is not None else self.config.refresh_cookie_key
+        cookie_path = path if path is not None else self.config.refresh_cookie_path
+        cookie_domain = domain if domain is not None else self.config.cookie_domain
+        cookie_samesite = self._resolve_samesite(samesite)
         response.set_cookie(
             key=cookie_key,
             value=encoded_refresh_token,
             max_age=max_age,
-            path=self.config.refresh_cookie_path,
-            domain=self.config.cookie_domain,
+            path=cookie_path,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             httponly=True,
-            samesite=self.config.cookie_samesite,
+            samesite=cookie_samesite,
         )
 
         # Set CSRF cookie if protection is enabled
         if self.config.cookie_csrf_protect:
-            self._set_csrf_cookie(encoded_refresh_token, response, self.config.refresh_csrf_cookie_key, self.config.refresh_csrf_cookie_path, max_age)
+            self._set_csrf_cookie(
+                encoded_refresh_token,
+                response,
+                csrf_key if csrf_key is not None else self.config.refresh_csrf_cookie_key,
+                csrf_path if csrf_path is not None else self.config.refresh_csrf_cookie_path,
+                cookie_domain,
+                cookie_samesite,
+                max_age,
+            )
 
-    def unset_jwt_cookies(self, response: Optional[Response] = None) -> None:
+    def unset_jwt_cookies(
+        self,
+        response: Optional[Response] = None,
+        *,
+        access_key: Optional[str] = None,
+        access_path: Optional[str] = None,
+        access_domain: Optional[str] = None,
+        access_csrf_key: Optional[str] = None,
+        access_csrf_path: Optional[str] = None,
+        refresh_key: Optional[str] = None,
+        refresh_path: Optional[str] = None,
+        refresh_domain: Optional[str] = None,
+        refresh_csrf_key: Optional[str] = None,
+        refresh_csrf_path: Optional[str] = None,
+    ) -> None:
         """
         Unset all JWT cookies (access, refresh, and CSRF).
 
+        A cookie is cleared only where it was set, so a call that named a cookie must name it here too. The access and refresh halves are named
+        separately, because a scoped application gives them paths of their own.
+
         Args:
             response: Optional response object (uses instance response if not provided)
+            access_key: Access cookie name for this call, in place of `access_cookie_key`
+            access_path: Access cookie path for this call, in place of `access_cookie_path`
+            access_domain: Access cookie domain for this call, in place of `cookie_domain`; it covers that half's CSRF cookie too
+            access_csrf_key: Access CSRF cookie name for this call, in place of `access_csrf_cookie_key`
+            access_csrf_path: Access CSRF cookie path for this call, in place of `access_csrf_cookie_path`
+            refresh_key: Refresh cookie name for this call, in place of `refresh_cookie_key`
+            refresh_path: Refresh cookie path for this call, in place of `refresh_cookie_path`
+            refresh_domain: Refresh cookie domain for this call, in place of `cookie_domain`; it covers that half's CSRF cookie too
+            refresh_csrf_key: Refresh CSRF cookie name for this call, in place of `refresh_csrf_cookie_key`
+            refresh_csrf_path: Refresh CSRF cookie path for this call, in place of `refresh_csrf_cookie_path`
         """
-        self.unset_access_cookies(response)
-        self.unset_refresh_cookies(response)
+        self.unset_access_cookies(response, key=access_key, path=access_path, domain=access_domain, csrf_key=access_csrf_key, csrf_path=access_csrf_path)
+        self.unset_refresh_cookies(response, key=refresh_key, path=refresh_path, domain=refresh_domain, csrf_key=refresh_csrf_key, csrf_path=refresh_csrf_path)
 
-    def unset_access_cookies(self, response: Optional[Response] = None) -> None:
+    def unset_access_cookies(
+        self,
+        response: Optional[Response] = None,
+        *,
+        key: Optional[str] = None,
+        path: Optional[str] = None,
+        domain: Optional[str] = None,
+        csrf_key: Optional[str] = None,
+        csrf_path: Optional[str] = None,
+    ) -> None:
         """
         Unset access token cookies.
 
+        A cookie is cleared only where it was set, so a call that named a cookie must name it here too.
+
         Args:
             response: Optional response object (uses instance response if not provided)
+            key: Cookie name for this call, in place of `access_cookie_key`
+            path: Cookie path for this call, in place of `access_cookie_path`
+            domain: Cookie domain for this call, in place of `cookie_domain`; it covers the CSRF cookie too, the two belonging to one site
+            csrf_key: CSRF cookie name for this call, in place of `access_csrf_cookie_key`
+            csrf_path: CSRF cookie path for this call, in place of `access_csrf_cookie_path`
         """
         response = response or self._response
         if not response:
             raise RuntimeError('Response object is required to unset cookies')
 
         # Unset main access token cookie
-        cookie_key = self.config.access_cookie_key
+        cookie_key = key if key is not None else self.config.access_cookie_key
+        cookie_path = path if path is not None else self.config.access_cookie_path
+        cookie_domain = domain if domain is not None else self.config.cookie_domain
         response.delete_cookie(
             key=cookie_key,
-            path=self.config.access_cookie_path,
-            domain=self.config.cookie_domain,
+            path=cookie_path,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             samesite=self.config.cookie_samesite,
         )
 
         # Unset CSRF cookie
-        csrf_key = self.config.access_csrf_cookie_key
         response.delete_cookie(
-            key=csrf_key,
-            path=self.config.access_csrf_cookie_path,
-            domain=self.config.cookie_domain,
+            key=csrf_key if csrf_key is not None else self.config.access_csrf_cookie_key,
+            path=csrf_path if csrf_path is not None else self.config.access_csrf_cookie_path,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             samesite=self.config.cookie_samesite,
         )
 
-    def unset_refresh_cookies(self, response: Optional[Response] = None) -> None:
+    def unset_refresh_cookies(
+        self,
+        response: Optional[Response] = None,
+        *,
+        key: Optional[str] = None,
+        path: Optional[str] = None,
+        domain: Optional[str] = None,
+        csrf_key: Optional[str] = None,
+        csrf_path: Optional[str] = None,
+    ) -> None:
         """
         Unset refresh token cookies.
 
+        A cookie is cleared only where it was set, so a call that named a cookie must name it here too.
+
         Args:
             response: Optional response object (uses instance response if not provided)
+            key: Cookie name for this call, in place of `refresh_cookie_key`
+            path: Cookie path for this call, in place of `refresh_cookie_path`
+            domain: Cookie domain for this call, in place of `cookie_domain`; it covers the CSRF cookie too, the two belonging to one site
+            csrf_key: CSRF cookie name for this call, in place of `refresh_csrf_cookie_key`
+            csrf_path: CSRF cookie path for this call, in place of `refresh_csrf_cookie_path`
         """
         response = response or self._response
         if not response:
             raise RuntimeError('Response object is required to unset cookies')
 
         # Unset main refresh token cookie
-        cookie_key = self.config.refresh_cookie_key
+        cookie_key = key if key is not None else self.config.refresh_cookie_key
+        cookie_path = path if path is not None else self.config.refresh_cookie_path
+        cookie_domain = domain if domain is not None else self.config.cookie_domain
         response.delete_cookie(
             key=cookie_key,
-            path=self.config.refresh_cookie_path,
-            domain=self.config.cookie_domain,
+            path=cookie_path,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             samesite=self.config.cookie_samesite,
         )
 
         # Unset CSRF cookie
-        csrf_key = self.config.refresh_csrf_cookie_key
         response.delete_cookie(
-            key=csrf_key,
-            path=self.config.refresh_csrf_cookie_path,
-            domain=self.config.cookie_domain,
+            key=csrf_key if csrf_key is not None else self.config.refresh_csrf_cookie_key,
+            path=csrf_path if csrf_path is not None else self.config.refresh_csrf_cookie_path,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             samesite=self.config.cookie_samesite,
         )
 
-    def _set_csrf_cookie(self, encoded_token: str, response: Response, cookie_key: str, cookie_path: str, max_age: Optional[int]) -> None:
+    def _resolve_samesite(self, samesite: Optional[Literal['strict', 'lax', 'none']]) -> Optional[Literal['strict', 'lax', 'none']]:
+        """
+        Resolve a per-call SameSite against the configuration.
+
+        Args:
+            samesite: The SameSite value for this call, or None to take the configured one
+
+        Returns:
+            The SameSite value to write on the cookie
+
+        Raises:
+            ValueError: If 'none' is asked for while `cookie_secure` is False, a combination browsers reject
+        """
+        if samesite is None:
+            return self.config.cookie_samesite
+        if samesite == 'none' and not self.config.cookie_secure:
+            raise ValueError("cookie_secure must be True when samesite is 'none'")
+        return samesite
+
+    def _set_csrf_cookie(
+        self,
+        encoded_token: str,
+        response: Response,
+        cookie_key: str,
+        cookie_path: str,
+        cookie_domain: Optional[str],
+        cookie_samesite: Optional[Literal['strict', 'lax', 'none']],
+        max_age: Optional[int],
+    ) -> None:
         """
         Set CSRF protection cookie.
 
@@ -286,6 +439,8 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             response: Response object to set cookie on
             cookie_key: The CSRF cookie key to use
             cookie_path: The cookie path to use
+            cookie_domain: The cookie domain to use, already resolved against the configuration
+            cookie_samesite: The SameSite value to use, already resolved against the configuration
             max_age: Max age for the cookie in seconds (None if no expiration)
         """
         # Decode token to get CSRF value
@@ -301,10 +456,10 @@ class JWTHarmony(JWTHarmonyBase[UserModelT]):
             value=str(csrf_value),
             max_age=max_age,
             path=cookie_path,
-            domain=self.config.cookie_domain,
+            domain=cookie_domain,
             secure=self.config.cookie_secure,
             httponly=False,  # Must be False for CSRF
-            samesite=self.config.cookie_samesite,
+            samesite=cookie_samesite,
         )
 
     def _verify_and_get_jwt_in_cookies(self, request: Request, cookie_key: str, csrf_header_name: str, type_token: str, fresh: bool = False) -> None:

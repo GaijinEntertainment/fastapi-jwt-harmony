@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `set_access_cookies`, `set_refresh_cookies`, `unset_access_cookies` and
+  `unset_refresh_cookies` take `key`, `path`, `domain`, `csrf_key` and
+  `csrf_path` for the call, so an application that scopes a cookie per request —
+  one path per tenant, or one domain per white-label site — can address it where
+  it sets it instead of reconfiguring the library, whose configuration is one per
+  process. `domain` covers the token cookie and its CSRF cookie together, since
+  the two belong to one site. Each argument falls back to the configured value
+  when it is not given, so existing calls set and clear the same cookies as
+  before.
+- `unset_jwt_cookies` takes the same names for both halves it clears —
+  `access_key`, `access_path`, `access_domain`, `access_csrf_key`,
+  `access_csrf_path` and the five `refresh_` counterparts — so one call clears
+  what a scoped login set. The two halves are named separately because a scoped
+  application gives them paths of their own. A cookie is cleared only where it
+  was set, so a call that named one names it again when clearing it.
+- `set_access_cookies` and `set_refresh_cookies` also take `samesite`, for an
+  application that is embedded in one context and standalone in another, or that
+  has to survive a cross-site POST back from an identity provider. It shapes a
+  cookie rather than addressing it, so the unsetters do not take it: a browser
+  identifies a cookie by name, domain and path, and clears it whatever SameSite
+  the deletion carries. `samesite='none'` raises unless `cookie_secure` is set,
+  the same rule the config model enforces.
+- `cookie_secure` stays configuration-only. It is the one attribute whose
+  per-call value could only weaken a cookie, and no request-scoped reason to
+  weaken one exists.
+
 ## [0.3.1] - 2026-08-30
 
 ### Added
