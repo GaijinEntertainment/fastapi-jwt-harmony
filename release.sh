@@ -105,18 +105,6 @@ create_tag() {
     git push origin "$tag"
 }
 
-# Trigger release workflow
-trigger_release() {
-    local version=$1
-
-    print_status "Triggering release workflow for version $version"
-    gh workflow run release.yml -f version="$version" -f create_tag="false"
-
-    print_success "Release workflow triggered!"
-    print_status "You can monitor the progress at:"
-    print_status "  https://github.com/$(gh repo view --json owner,name -q '.owner.login + \"/\" + .name')/actions"
-}
-
 # Create pre-release
 create_prerelease() {
     local suffix=$1
